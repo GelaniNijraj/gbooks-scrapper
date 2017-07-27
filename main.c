@@ -305,7 +305,7 @@ struct page* get_book_info(char *id, int *page_count){
 	}
 }
 
-void get_page(struct page page){
+void get_page(struct page page, int fake_order){
 	int i;
 	char *image_url;
 	struct string response, image;
@@ -315,7 +315,7 @@ void get_page(struct page page){
 	response.memory = malloc(1);
 	response.size = 0;
 	if(verbose){
-    	printf("- fetching page number %d\n", page.order);
+    	printf("- fetching page number %d\n", fake_order);
 		printf("- generated url is %s\n", page.url);
 	}
 	res = make_get_request(page.url, &response);
@@ -344,7 +344,7 @@ int main(int argc, char** argv){
 	int token_count, i, j, k, page_count;
 	char *prefix, *id = NULL, c;
 	// char id[] = "GeEcyY7dE-wC", c;
-	struct page *pages;
+	struct page *pages, tmp_page;
 
 
 
@@ -398,9 +398,18 @@ int main(int argc, char** argv){
 		exit(0);
 	}else{
 		pages = get_book_info(id, &page_count);
+		// sort 'em
 		for(i = 0; i < page_count; i++){
-			get_page(pages[i]);
+			for(j = i; j < page_count; j++){
+				if(pages[j].order < pages[i].order){
+					tmp_page = pages[i];
+					pages[i] = pages[j];
+					pages[j] = tmp_page;
+				}
+			}
 		}
+		for(i = (start_page == -1 ? 0 : start_page - 1); i <= (end_page == -1 ? page_count : end_page - 1); i++)
+			get_page(pages[i], i + 1);
 		if(verbose)
 			printf("- %d pages downloaded\n", downloaded_pages);
 	}
