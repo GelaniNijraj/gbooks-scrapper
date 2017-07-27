@@ -1,8 +1,41 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <unistd.h>
+#include <getopt.h>
 #include <curl/curl.h>
 #include "jsmn.h"
+
+
+/*
+         _____
+     _-~~     ~~-_//
+   /~             ~\
+  |              _  |_
+ |         _--~~~ )~~ )___
+\|        /   ___   _-~   ~-_
+\          _-~   ~-_         \
+|         /         \         |
+|        |           |     (O  |
+ |      |             |        |
+ |      |   O)        |       |
+ /|      |           |       /
+ / \ _--_ \         /-_   _-~)
+   /~    \ ~-_   _-~   ~~~__/
+  |   |\  ~-_ ~~~ _-~~---~  \
+  |   | |    ~--~~  / \      ~-_
+   |   \ |                      ~-_
+    \   ~-|                        ~~--__ _-~~-,
+     ~-_   |                             /     |
+        ~~--|                                 /
+          |  |                               /
+          |   |              _            _-~
+          |  /~~--_   __---~~          _-~
+          |  \                   __--~~
+          |  |~~--__     ___---~~
+          |  |      ~~~~~
+          |  |
+*/
 
 struct string {
   char *memory;
@@ -13,6 +46,24 @@ struct page{
 	char *id, *url;
 	int order;
 };
+
+int downloaded_pages, verbose, complete_download, start_page, end_page, download_complete;
+
+char *target_location = NULL;
+
+void usage(char **argv){
+	printf("\
+Usage: %s [OPTIONS]\n\n\
+  -i, --id=ID               ID of the book\n\
+  -I, --info                get book information only\n\
+  -c, --complete            download complete book\n\
+  -t, --target-location     download files location\n\
+  -s, --start-page=PAGE     start download from page PAGE\n\
+  -e, --end-page=PAGE       download pages upto PAGE\n\
+  -v, --verbose             show status messages\n\
+  -h, --help                get this message\n\
+", argv[0]);
+}
 
 void str_print(char *str, int start, int end){
 	for(; start < end; start++)
@@ -104,7 +155,8 @@ static size_t write_callback(void *contents, size_t size, size_t nmemb, void *us
 
   mem->memory = realloc(mem->memory, mem->size + realsize + 1);
   if(mem->memory == NULL) {
-    printf("not enough memory (realloc returned NULL)\n");
+    if(verbose)
+    	printf("- not enough memory (realloc returned NULL)\n");
     return 0;
   }
   memcpy(&(mem->memory[mem->size]), contents, realsize);
@@ -119,6 +171,33 @@ static size_t write_data(void *ptr, size_t size, size_t nmemb, void *stream){
   return written;
 }
 
+void get_file(char *url, char *file){
+	CURL *curl_handle;
+	FILE *pagefile;
+	CURLcode res;
+	
+	curl_global_init(CURL_GLOBAL_ALL);
+  	curl_handle = curl_easy_init();
+	curl_easy_setopt(curl_handle, CURLOPT_URL, url);
+	curl_easy_setopt(curl_handle, CURLOPT_NOPROGRESS, 1L);
+	curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, write_data);
+	pagefile = fopen(file, "wb");
+	if(pagefile) {
+		curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, pagefile);
+		res = curl_easy_perform(curl_handle);
+		fclose(pagefile);
+		if(res == CURLE_OK){
+			if(verbose)
+    			printf("- downloaded successfully\n");
+			downloaded_pages++;
+		}else{
+			if(verbose)
+    			printf("- failed to download\n");
+		}
+	}
+	curl_easy_cleanup(curl_handle);
+}
+
 
 CURLcode make_get_request(const char *url, struct string *response){
 	CURL *curl;
@@ -128,7 +207,9 @@ CURLcode make_get_request(const char *url, struct string *response){
 
 	if(curl){
 		curl_easy_setopt(curl, CURLOPT_URL, url);
+		curl_easy_setopt(curl, CURLOPT_USERAGENT, "Mozilla/5.0 (X11; U; Linux x86_64)");
 		curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
+		curl_easy_setopt(curl, CURLOPT_COOKIEFILE, "");
 		curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
     	curl_easy_setopt(curl, CURLOPT_HTTPGET, 1);
 		curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)response);
@@ -163,10 +244,6 @@ int parse_book_json(char *json, jsmntok_t **tokens){
 	*tokens = malloc(sizeof(jsmntok_t) * r);
 	jsmn_init(&parser);
 	r = jsmn_parse(&parser, json, strlen(json), *tokens, r);
-	// for(i = 0; i < r; i++){
-	// 	printf("%s\n", str_get(json, (*tokens)[i].start, (*tokens)[i].end));
-	// }
-	printf("- %d tokens scanned\n", r);
 	return r;
 }
 
@@ -176,10 +253,10 @@ struct page* get_pages(char *book_id, jsmntok_t *tokens, char *json, int r, int 
 	struct page *pages;
 	i = -1;
 	while(!str_matches(json, tokens[++i].start, tokens[i].end, "page") && i < r);
-	str_print(json, tokens[i - 1].start, tokens[i - 1].end);
 	*page_count = tokens[i].size;
 	pages = malloc(sizeof(struct page) * (*page_count));
-	printf("- %d pages found\n", tokens[i].size);
+	if(verbose)
+    	printf("- %d pages found\n", tokens[i].size);
 	for(j = 0; j < *page_count; ){
 		if(tokens[i++].type == JSMN_OBJECT){
 			k = i;
@@ -196,10 +273,6 @@ struct page* get_pages(char *book_id, jsmntok_t *tokens, char *json, int r, int 
 			k++;
 			pages[j].id = str_get(json, tokens[k].start, tokens[k].end);
 			pages[j].url = get_page_url(book_id, pages[j].id);
-			// pages[j].id = t_str;
-			// pages[j].id[0] = '\0';
-			// free(t_str);
-			// printf("%s\n", t_str);
 			j++;
 		}
 	}
@@ -215,6 +288,8 @@ struct page* get_book_info(char *id, int *page_count){
 	jsmntok_t *tokens;
 
 	book_url = get_cover_url(id);
+	if(verbose)
+    	printf("- getting book info from %s\n", book_url);
 	response.memory = malloc(1);
 	response.size = 0;
 
@@ -224,7 +299,9 @@ struct page* get_book_info(char *id, int *page_count){
 		token_count = parse_book_json(json, &tokens);
 		return get_pages(id, tokens, json, token_count, page_count);;
 	}else{
-		printf("- %s\n", curl_easy_strerror(res));
+		if(verbose)
+    		printf("- %s\n", curl_easy_strerror(res));
+		return NULL;
 	}
 }
 
@@ -237,34 +314,95 @@ void get_page(struct page page){
 
 	response.memory = malloc(1);
 	response.size = 0;
+	if(verbose){
+    	printf("- fetching page number %d\n", page.order);
+		printf("- generated url is %s\n", page.url);
+	}
 	res = make_get_request(page.url, &response);
 	if(res == CURLE_OK){
+		if(strstr(response.memory, "/googlebooks/restricted_logo.gif") != NULL){
+			if(verbose)
+    			printf("- page restricted\n");
+			return;
+		}
 		image_url = strstr(response.memory, "preloadImg.src = ");
 		image_url += 18;
 		for(i = 0; image_url[i] != '\''; i++);
 		image_url[i] = '\0';
 		image_url = str_replace(image_url, "\\x26", "&");
 		image_url = str_replace(image_url, "\\x3d", "=");
-		printf("%s\n", image_url);
-		// res = make_get_request("https://books.google.co.in/books/content?id=GeEcyY7dE-wC&pg=PP1&img=1&zoom=3&hl=en&sig=ACfU3U3zi7q3GdYSr0cU6Do6cvQhMJHUwA&w=685", &image);
-		// if(res == CURLE_OK){
-		// 	printf("gotcha!\n");
-		// }else{
-		// 	printf("- %s\n", curl_easy_strerror(res));
-		// }
+		if(verbose)
+    		printf("- downloading %s\n", image_url);
+		get_file(image_url, "file.tmp");
 	}else{
-		printf("- %s\n", curl_easy_strerror(res));
+		if(verbose)
+    		printf("- %s\n", curl_easy_strerror(res));
 	}
 }
 
-int main(){
+int main(int argc, char** argv){
 	int token_count, i, j, k, page_count;
-	char *prefix;
-	char id[] = "GeEcyY7dE-wC";
+	char *prefix, *id = NULL, c;
+	// char id[] = "GeEcyY7dE-wC", c;
 	struct page *pages;
-	pages = get_book_info(id, &page_count);
-	for(i = 0; i < 1; i++){
-		get_page(pages[i]);
+
+
+
+	static struct option const long_options[] = {
+		{"id",              required_argument, NULL, 'i'},
+		{"info",            no_argument,       NULL, 'I'},
+		{"complete",        no_argument,       NULL, 'c'},
+		{"target-location", required_argument, NULL, 't'},
+		{"start-page",      optional_argument, NULL, 's'},
+		{"end-page",        optional_argument, NULL, 'e'},
+		{"verbose",         no_argument,       NULL, 'v'},
+		{"help",            no_argument,       NULL, 'h'}
+	}; 
+
+	
+	downloaded_pages = 0;
+	verbose = 0;
+	download_complete = 0;
+	start_page = -1;
+	end_page = -1;
+
+
+	while((c = getopt_long(argc, argv, "i:cIt:s:e:hv", long_options, NULL)) != -1){
+		switch(c){
+			case 'i':
+				id = strdup(optarg);
+				break;
+			case 't':
+				target_location = strdup(optarg);
+				break;
+			case 's':
+				start_page = atoi(optarg);
+				break;
+			case 'e':
+				end_page = atoi(optarg);
+				break;
+			case 'v': 
+				verbose = 1; 
+				break;
+			case 'c': 
+				download_complete = 1; 
+				break;
+			case 'h':
+				usage(argv);
+			default:
+				exit(0);
+		}
+	}
+
+	if(id == NULL){
+		exit(0);
+	}else{
+		pages = get_book_info(id, &page_count);
+		for(i = 0; i < page_count; i++){
+			get_page(pages[i]);
+		}
+		if(verbose)
+			printf("- %d pages downloaded\n", downloaded_pages);
 	}
 	return 0;
 }
