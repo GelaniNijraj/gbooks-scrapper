@@ -1,6 +1,6 @@
 # gbooks-scrapper
 
-Google books scrapper
+Google books scrapper made with C
 
 ## Installation
 
