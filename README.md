@@ -2,7 +2,14 @@
 
 Google books scrapper
 
-## How to
+## Installation
+
+```
+make
+make install
+```
+
+## Usage
 
 ```
 Usage: gbooks-scrapper [OPTIONS]
