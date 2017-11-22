@@ -4,38 +4,7 @@
 #include <unistd.h>
 #include <getopt.h>
 #include <curl/curl.h>
-#include "jsmn.h"
-
-
-/*
-         _____
-     _-~~     ~~-_//
-   /~             ~\
-  |              _  |_
- |         _--~~~ )~~ )___
-\|        /   ___   _-~   ~-_
-\          _-~   ~-_         \
-|         /         \         |
-|        |           |     (O  |
- |      |             |        |
- |      |   O)        |       |
- /|      |           |       /
- / \ _--_ \         /-_   _-~)
-   /~    \ ~-_   _-~   ~~~__/
-  |   |\  ~-_ ~~~ _-~~---~  \
-  |   | |    ~--~~  / \      ~-_
-   |   \ |                      ~-_
-    \   ~-|                        ~~--__ _-~~-,
-     ~-_   |                             /     |
-        ~~--|                                 /
-          |  |                               /
-          |   |              _            _-~
-          |  /~~--_   __---~~          _-~
-          |  \                   __--~~
-          |  |~~--__     ___---~~
-          |  |      ~~~~~
-          |  |
-*/
+#include "jsmn/jsmn.h"
 
 struct string {
   char *memory;
@@ -53,7 +22,8 @@ char *target_location = NULL;
 
 void usage(char **argv){
 	printf("\
-Usage: %s [OPTIONS]\n\n\
+Usage: %s [OPTIONS]\n\
+A tool to scrape pages as images from books.google.com\n\n\
   -i, --id=ID               ID of the book\n\
   -I, --info                get book information only\n\
   -c, --complete            download complete book\n\
@@ -63,11 +33,6 @@ Usage: %s [OPTIONS]\n\n\
   -v, --verbose             show status messages\n\
   -h, --help                get this message\n\
 ", argv[0]);
-}
-
-void str_print(char *str, int start, int end){
-	for(; start < end; start++)
-		printf("%c", str[start]);
 }
 
 char* str_get(char *str, int start, int end){
@@ -156,7 +121,7 @@ static size_t write_callback(void *contents, size_t size, size_t nmemb, void *us
   mem->memory = realloc(mem->memory, mem->size + realsize + 1);
   if(mem->memory == NULL) {
     if(verbose)
-    	printf("- not enough memory (realloc returned NULL)\n");
+    	printf("[ERR] not enough memory (realloc returned NULL)\n");
     return 0;
   }
   memcpy(&(mem->memory[mem->size]), contents, realsize);
@@ -188,11 +153,11 @@ void get_file(char *url, char *file){
 		fclose(pagefile);
 		if(res == CURLE_OK){
 			if(verbose)
-    			printf("- downloaded successfully\n");
+    			printf("[INF] downloaded successfully\n");
 			downloaded_pages++;
 		}else{
 			if(verbose)
-    			printf("- failed to download\n");
+    			printf("[ERR] failed to download\n");
 		}
 	}
 	curl_easy_cleanup(curl_handle);
@@ -212,6 +177,7 @@ CURLcode make_get_request(const char *url, struct string *response){
 		curl_easy_setopt(curl, CURLOPT_COOKIEFILE, "");
 		curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
     	curl_easy_setopt(curl, CURLOPT_HTTPGET, 1);
+    	curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1);
 		curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)response);
 		res = curl_easy_perform(curl);
 	}
@@ -224,7 +190,7 @@ CURLcode make_get_request(const char *url, struct string *response){
 char* cleanup_response(char *response){
 	char *json = strstr(response, "_OC_Run("),  *json_end = NULL;
 	if(json != NULL){
-		json += 6; // removing _OC_Run(
+		json += 6; // removing "_OC_Run("
 		json[0] = '\0';
 		json++;
 		json[0] = '[';
@@ -256,7 +222,7 @@ struct page* get_pages(char *book_id, jsmntok_t *tokens, char *json, int r, int 
 	*page_count = tokens[i].size;
 	pages = malloc(sizeof(struct page) * (*page_count));
 	if(verbose)
-    	printf("- %d pages found\n", tokens[i].size);
+    	printf("[INF] %d pages found\n", tokens[i].size);
 	for(j = 0; j < *page_count; ){
 		if(tokens[i++].type == JSMN_OBJECT){
 			k = i;
@@ -289,7 +255,7 @@ struct page* get_book_info(char *id, int *page_count){
 
 	book_url = get_cover_url(id);
 	if(verbose)
-    	printf("- getting book info from %s\n", book_url);
+    	printf("[INF] getting book info from %s\n", book_url);
 	response.memory = malloc(1);
 	response.size = 0;
 
@@ -300,14 +266,14 @@ struct page* get_book_info(char *id, int *page_count){
 		return get_pages(id, tokens, json, token_count, page_count);;
 	}else{
 		if(verbose)
-    		printf("- %s\n", curl_easy_strerror(res));
+    		printf("[ERR] book not found at this URL\n");
 		return NULL;
 	}
 }
 
 void get_page(struct page page, int fake_order){
 	int i;
-	char *image_url;
+	char *image_url, file[255];
 	struct string response, image;
 	CURLcode res;
 
@@ -315,14 +281,14 @@ void get_page(struct page page, int fake_order){
 	response.memory = malloc(1);
 	response.size = 0;
 	if(verbose){
-    	printf("- fetching page number %d\n", fake_order);
-		printf("- generated url is %s\n", page.url);
+    	printf("[INF] fetching page number %d\n", fake_order);
+		printf("[INF] generated url is %s\n", page.url);
 	}
 	res = make_get_request(page.url, &response);
 	if(res == CURLE_OK){
 		if(strstr(response.memory, "/googlebooks/restricted_logo.gif") != NULL){
 			if(verbose)
-    			printf("- page restricted\n");
+    			printf("[ERR] page restricted\n");
 			return;
 		}
 		image_url = strstr(response.memory, "preloadImg.src = ");
@@ -332,8 +298,9 @@ void get_page(struct page page, int fake_order){
 		image_url = str_replace(image_url, "\\x26", "&");
 		image_url = str_replace(image_url, "\\x3d", "=");
 		if(verbose)
-    		printf("- downloading %s\n", image_url);
-		get_file(image_url, "file.tmp");
+    		printf("[INF] downloading %s\n", image_url);
+    	sprintf(file, "%s/%d.png", target_location, fake_order);
+		get_file(image_url, file);
 	}else{
 		if(verbose)
     		printf("- %s\n", curl_easy_strerror(res));
@@ -394,24 +361,34 @@ int main(int argc, char** argv){
 		}
 	}
 
-	if(id == NULL){
+	if(!id){
+		if(verbose)
+			printf("[ERR] no ID specified\n");
 		exit(0);
-	}else{
-		pages = get_book_info(id, &page_count);
-		// sort 'em
-		for(i = 0; i < page_count; i++){
-			for(j = i; j < page_count; j++){
-				if(pages[j].order < pages[i].order){
-					tmp_page = pages[i];
-					pages[i] = pages[j];
-					pages[j] = tmp_page;
-				}
+	}
+
+	if(!target_location){
+		if(verbose)
+			printf("[ERR] no target directory specified\n");
+		exit(0);
+	}
+
+	pages = get_book_info(id, &page_count);
+	if(!pages)
+		exit(0);
+	// sort 'em
+	for(i = 0; i < page_count; i++){
+		for(j = i; j < page_count; j++){
+			if(pages[j].order < pages[i].order){
+				tmp_page = pages[i];
+				pages[i] = pages[j];
+				pages[j] = tmp_page;
 			}
 		}
-		for(i = (start_page == -1 ? 0 : start_page - 1); i <= (end_page == -1 ? page_count : end_page - 1); i++)
-			get_page(pages[i], i + 1);
-		if(verbose)
-			printf("- %d pages downloaded\n", downloaded_pages);
 	}
+	for(i = (start_page == -1 ? 0 : start_page - 1); i <= (end_page == -1 ? page_count : end_page - 1); i++)
+		get_page(pages[i], i + 1);
+	if(verbose)
+		printf("[INF] %d pages downloaded\n", downloaded_pages);
 	return 0;
 }
