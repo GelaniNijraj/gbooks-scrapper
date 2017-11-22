@@ -1,5 +1,7 @@
 # gbooks-scrapper
 
+![Image of Scrappy](/scrappy.jpg)
+
 Google books scrapper made with C
 
 ## Installation
