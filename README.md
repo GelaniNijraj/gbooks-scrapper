@@ -1,6 +1,6 @@
 # gbooks-scrapper
 
-![Image of Scrappy](/scrappy.jpg)
+![Image of Scrappy](/scrappy.jpg | height=150)
 
 Google books scrapper made with C
 
