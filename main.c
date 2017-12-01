@@ -369,7 +369,7 @@ int main(int argc, char** argv){
 
 	pages = get_book_info(id, &page_count);
 	if(!pages){
-		printf("[ERR] no pages found\n", );
+		printf("[ERR] no pages found\n");
 		exit(-1);
 	}
 	// sort 'em
@@ -382,7 +382,13 @@ int main(int argc, char** argv){
 			}
 		}
 	}
-	for(i = (start_page == -1 ? 0 : start_page - 1); i <= (end_page == -1 ? page_count : end_page - 1); i++)
+
+	if(download_complete){
+		start_page = 1;
+		end_page = page_count;
+	}
+
+	for(i = (start_page == -1 ? 1 : start_page - 1); i <= (end_page == -1 ? page_count : end_page - 1); i++)
 		get_page(pages[i], i + 1);
 	if(verbose)
 		printf("[INF] %d pages downloaded\n", downloaded_pages);
