@@ -120,9 +120,8 @@ static size_t write_callback(void *contents, size_t size, size_t nmemb, void *us
 
   mem->memory = realloc(mem->memory, mem->size + realsize + 1);
   if(mem->memory == NULL) {
-    if(verbose)
-    	printf("[ERR] not enough memory (realloc returned NULL)\n");
-    return 0;
+    printf("[ERR] not enough memory (realloc returned NULL)\n");
+    exit(-1);
   }
   memcpy(&(mem->memory[mem->size]), contents, realsize);
   mem->size += realsize;
@@ -156,8 +155,7 @@ void get_file(char *url, char *file){
     			printf("[INF] downloaded successfully\n");
 			downloaded_pages++;
 		}else{
-			if(verbose)
-    			printf("[ERR] failed to download\n");
+    		printf("[ERR] failed to download\n");
 		}
 	}
 	curl_easy_cleanup(curl_handle);
@@ -265,8 +263,7 @@ struct page* get_book_info(char *id, int *page_count){
 		token_count = parse_book_json(json, &tokens);
 		return get_pages(id, tokens, json, token_count, page_count);;
 	}else{
-		if(verbose)
-    		printf("[ERR] book not found at this URL\n");
+    	printf("[ERR] book not found at this URL\n");
 		return NULL;
 	}
 }
@@ -287,8 +284,7 @@ void get_page(struct page page, int fake_order){
 	res = make_get_request(page.url, &response);
 	if(res == CURLE_OK){
 		if(strstr(response.memory, "/googlebooks/restricted_logo.gif") != NULL){
-			if(verbose)
-    			printf("[ERR] page restricted\n");
+    		printf("[ERR] page restricted (skipping)\n");
 			return;
 		}
 		image_url = strstr(response.memory, "preloadImg.src = ");
@@ -362,20 +358,20 @@ int main(int argc, char** argv){
 	}
 
 	if(!id){
-		if(verbose)
-			printf("[ERR] no ID specified\n");
-		exit(0);
+		printf("[ERR] no ID specified\n");
+		exit(2);
 	}
 
 	if(!target_location){
-		if(verbose)
-			printf("[ERR] no target directory specified\n");
-		exit(0);
+		printf("[ERR] no target directory specified\n");
+		exit(2);
 	}
 
 	pages = get_book_info(id, &page_count);
-	if(!pages)
-		exit(0);
+	if(!pages){
+		printf("[ERR] no pages found\n", );
+		exit(-1);
+	}
 	// sort 'em
 	for(i = 0; i < page_count; i++){
 		for(j = i; j < page_count; j++){
