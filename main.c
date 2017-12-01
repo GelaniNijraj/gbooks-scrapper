@@ -303,13 +303,15 @@ void get_page(struct page page, int fake_order){
 	}
 }
 
+void print_book_info(char *id, int pages){
+	printf("[INF] Book ID : %s\n", id);
+	printf("[INF] Page count : %d\n", pages);
+}
+
 int main(int argc, char** argv){
-	int token_count, i, j, k, page_count;
+	int token_count, i, j, k, page_count, only_info;
 	char *prefix, *id = NULL, c;
-	// char id[] = "GeEcyY7dE-wC", c;
 	struct page *pages, tmp_page;
-
-
 
 	static struct option const long_options[] = {
 		{"id",              required_argument, NULL, 'i'},
@@ -322,16 +324,18 @@ int main(int argc, char** argv){
 		{"help",            no_argument,       NULL, 'h'}
 	}; 
 
-	
 	downloaded_pages = 0;
 	verbose = 0;
+	only_info = 0;
 	download_complete = 0;
 	start_page = -1;
 	end_page = -1;
 
-
 	while((c = getopt_long(argc, argv, "i:cIt:s:e:hv", long_options, NULL)) != -1){
 		switch(c){
+			case 'I':
+				only_info = 1;
+				break;
 			case 'i':
 				id = strdup(optarg);
 				break;
@@ -362,17 +366,24 @@ int main(int argc, char** argv){
 		exit(2);
 	}
 
+	pages = get_book_info(id, &page_count);
+
+	if(only_info){
+		print_book_info(id, page_count);
+		exit(0);
+	}
+
 	if(!target_location){
 		printf("[ERR] no target directory specified\n");
 		exit(2);
 	}
 
-	pages = get_book_info(id, &page_count);
 	if(!pages){
 		printf("[ERR] no pages found\n");
 		exit(-1);
 	}
-	// sort 'em
+	
+	// sort 'em (bubble sort? really?)
 	for(i = 0; i < page_count; i++){
 		for(j = i; j < page_count; j++){
 			if(pages[j].order < pages[i].order){
@@ -390,6 +401,7 @@ int main(int argc, char** argv){
 
 	for(i = (start_page == -1 ? 1 : start_page - 1); i <= (end_page == -1 ? page_count : end_page - 1); i++)
 		get_page(pages[i], i + 1);
+
 	if(verbose)
 		printf("[INF] %d pages downloaded\n", downloaded_pages);
 	return 0;
