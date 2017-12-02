@@ -310,7 +310,7 @@ void print_book_info(char *id, int pages){
 
 int main(int argc, char** argv){
 	int token_count, i, j, k, page_count, only_info;
-	char *prefix, *id = NULL, c;
+	char *prefix, *id = NULL, c, *default_target = ".";
 	struct page *pages, tmp_page;
 
 	static struct option const long_options[] = {
@@ -374,15 +374,14 @@ int main(int argc, char** argv){
 	}
 
 	if(!target_location){
-		printf("[ERR] no target directory specified\n");
-		exit(2);
+		target_location = default_target;
 	}
 
 	if(!pages){
 		printf("[ERR] no pages found\n");
 		exit(-1);
 	}
-	
+
 	// sort 'em (bubble sort? really?)
 	for(i = 0; i < page_count; i++){
 		for(j = i; j < page_count; j++){
