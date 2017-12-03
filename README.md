@@ -1,10 +1,14 @@
 # gbooks-scrapper
 
-<center><img src="/scrappy.jpg" height=150px /></center>
+<img src="/scrappy.jpg" height=150px />
 
 Google books scrapper made with C
 
-## Installation
+## Download
+
+[Linux v1.0.1](https://github.com/GelaniNijraj/gbooks-scrapper/releases/download/v1.0.1/gbooks-scrapper)
+
+## Build from source
 
 ```
 make
