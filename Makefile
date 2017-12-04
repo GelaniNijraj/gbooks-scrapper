@@ -2,7 +2,7 @@ DESTDIR = /usr/bin
 BINNAME = gbooks-scrapper
 
 build:
-	make -C jsmn libjsmn.a
+	make -C jsmn libjsmn.a CC=$(CC) AR=$(AR)
 	$(CC) main.c -o gbooks-scrapper -lcurl jsmn/libjsmn.a
 
 .PHONY: install
