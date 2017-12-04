@@ -6,7 +6,8 @@ Google books scrapper made with C
 
 ## Download
 
-[Linux v1.0.1](https://github.com/GelaniNijraj/gbooks-scrapper/releases/download/v1.0.1/gbooks-scrapper)
+- [Linux v1.0.1](https://github.com/GelaniNijraj/gbooks-scrapper/releases/download/v1.0.1/gbooks-scrapper)
+- [Windows v1.0.1](https://github.com/GelaniNijraj/gbooks-scrapper/releases/download/v1.0.1/gbooks-scrapper.exe)
 
 ## Build from source
 
